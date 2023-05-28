@@ -13,6 +13,8 @@ pub enum ServiceError {
     SpawnError(#[from] io::Error),
     #[error("failed to execute, status code {0}")]
     ExecutionError(i32),
+    #[error("failed to obtain status code")]
+    NoStatusCode,
     #[error("failed to find uploaded file {id}")]
     UploadedFileNotFound { id: String },
     #[error("failed to stream")]
@@ -164,7 +166,9 @@ impl Services for ProdServices {
             cleanup.await?;
             match command.wait().await? {
                 status if status.success() => Ok(()),
-                status => Err(ServiceError::ExecutionError(status.code().unwrap_or(-1))),
+                status => Err(status
+                    .code()
+                    .map_or_else(|| ServiceError::NoStatusCode, ServiceError::ExecutionError)),
             }
         } else {
             Err(ServiceError::UploadedFileNotFound { id: id.to_string() })

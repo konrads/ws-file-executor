@@ -113,7 +113,7 @@ async fn run_cmd_ws(req: HttpRequest, stream: web::Payload) -> Result<HttpRespon
             session
                 .text(line)
                 .await
-                .map_err(|_| ErrorInternalServerError("Failed to send stdout line"))?;
+                .unwrap_or_else(|_| log::error!("Failed to send stdout"));
         }
 
         let close_reason = match cmd_task.await {
@@ -127,7 +127,7 @@ async fn run_cmd_ws(req: HttpRequest, stream: web::Payload) -> Result<HttpRespon
         session
             .close(close_reason)
             .await
-            .map_err(|_| ErrorInternalServerError("Failed to close session"))?;
+            .unwrap_or_else(|_| log::error!("Failed to close session"));
         log::info!("Closed session {id}");
         Ok::<(), Error>(())
     });

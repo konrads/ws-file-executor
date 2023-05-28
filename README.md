@@ -69,9 +69,4 @@ Unit testing comprises:
 - `ProdService`'s upload and cmd execution
 - white box parallel testing of upload/cmd execution, mimicking web page interaction. Note: this doesn't go through `actix_web` machinery.
 
-For manual testing, see [Usage](#usage), and play with file imports/command running.
-
-## Snags
-
-- I'm using actix_rt for actix related runtime, tokio for command spawning, should settle on 1
-- Need more tests for error conditions
+For manual testing, see [Usage](#usage), and play with file imports/command running. For error conditions, feel free to select `bogus-cmd` for command, or [evil-cmd.sh](test-stage/scripts/evil-cmd.sh)

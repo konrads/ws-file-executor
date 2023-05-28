@@ -59,6 +59,46 @@ async fn test_execute_cmd() {
     assert!(t_delta >= 2000 && t_delta < 3000);
 }
 
+#[actix_rt::test]
+async fn test_execute_bogus_cmd() {
+    let services = ProdServices::with_init_files(
+        "test-stage/uploads".to_owned(),
+        HashMap::from([(".id456".to_owned(), "bogus_file".to_owned())]),
+    );
+
+    let (sender, _receiver) = mpsc::channel::<String>(1024);
+
+    let res = services.run_cmd(".id456", "bogus-cmd", sender).await;
+    match res {
+        Err(ServiceError::SpawnError(_)) => (),
+        _ => panic!("Expected SpawnError"),
+    }
+}
+
+#[actix_rt::test]
+async fn test_execute_on_bogus_file() {
+    write_file("test-stage/uploads/.id567/evil/die-script.sh", "exit 66");
+
+    let services = ProdServices::with_init_files(
+        "test-stage/uploads".to_owned(),
+        HashMap::from([(".id567".to_owned(), "bogus_file".to_owned())]),
+    );
+
+    let (sender, _receiver) = mpsc::channel::<String>(1024);
+
+    let res = services
+        .run_cmd(
+            ".id456",
+            "test-stage/uploads/.id567/evil/die-script.sh",
+            sender,
+        )
+        .await;
+    match res {
+        Err(ServiceError::UploadedFileNotFound { id }) if id == ".id456".to_owned() => (),
+        _ => panic!("Expected SpawnError"),
+    }
+}
+
 /// Tests parallel roundtrips, mimicking multiple browser sessions
 #[actix_rt::test]
 async fn test_parallel_roundtrips() {
