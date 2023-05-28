@@ -1,0 +1,16 @@
+target
+.DS_Store
+*.bk
+.vscode
+
+uploads/*
+!uploads/.gitkeep
+
+# test scripts
+test-stage/*/*
+!test-stage/scripts/register-file.txt
+!test-stage/scripts/evil-cmd.sh
+!test-stage/scripts/roundtrip1.sh
+!test-stage/scripts/roundtrip2.sh
+!test-stage/scripts/roundtrip3.sh
+!test-stage/scripts/roundtrip4.sh

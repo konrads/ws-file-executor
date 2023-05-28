@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Websocket File Executor</title>
+
+    <style>
+      :root {
+        font-size: 20px;
+      }
+
+      #command {
+        font-size: 18px;
+      }
+
+      #output {
+        width: 80em;
+        height: 80em;
+        overflow: auto;
+        margin: 0.5em 0;
+        border: 1px solid black;
+        font-size: 15px;
+      }
+
+      .msg-status {
+        /* a light yellow */
+        background-color: #ffffc9;
+        margin: 0;
+        padding: 0.2em 0.4em;
+      }
+
+      .msg-message {
+        /* a light blue */
+        background-color: #d2f4ff;
+        margin: 0;
+        padding: 0em 1em;
+      }
+
+      .msg-error {
+        background-color: pink;
+        margin: 0;
+        padding: 0.2em 0.4em;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Upload and execute command</h2>
+    <label for="command">Select a command:</label>
+    <select id="command" name="command">
+        <option value="cat">cat</option>
+        <option value="wc">wc</option>
+        <option value="sh">sh</option>
+        <option value="bogus-cmd">bogus-cmd</option>
+    </select>
+    
+    <br/><br/>
+    
+    <label for="uploadForm">Upload file:</label>
+    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+        <input id="file_path" type="text" name="file_path"/>
+        <input id="file" type="file" name="file"/>
+        <button id="run" type="submit">Run</button>
+    </form>
+
+    <br/>
+    <label for="output">Output:</label>
+    <div id="output"></div>
+
+    <script>
+        const output = document.getElementById('output');
+        const filePath = document.getElementById('file_path');
+        const file = document.getElementById('file');
+        const command = document.getElementById('command');
+        const uploadForm = document.getElementById('uploadForm');
+        const runButton = document.getElementById('run');
+        var socket = null;
+
+        function log(msg, type = 'status') {
+          output.innerHTML += `<pre class="msg-${type}">${msg}</pre>`
+          output.scrollTop += 1000
+        }
+
+        function onSubmit(event) {
+          event.preventDefault();
+
+          var formData = new FormData();
+          formData.append('file_path', filePath.value);
+          formData.append('file', file.files[0]);
+
+          var request = new XMLHttpRequest();
+          request.open('POST', '/upload');
+          request.send(formData);
+
+          request.onreadystatechange = function() {
+            if (request.readyState === XMLHttpRequest.DONE) {
+              if (request.status === 200) {
+                var fileIdHeaderId = request.getResponseHeader('X-File-Id');
+                log(`Uploaded file with X-File-Id: ${fileIdHeaderId}`, 'status');
+                if (socket) {
+                  log('Disconnected')
+                  socket.close();
+                  socket = null;
+                }
+
+                const wsUri = `ws://${window.location.host}/runCommand?id=${fileIdHeaderId}&cmd=${command.value}`
+
+                socket = new WebSocket(wsUri)
+                socket.onerror = (ev) => {
+                  log(`Server Error!`, 'error')
+                  runButton.disabled = false;
+                }
+                socket.onopen = () => {
+                  log('Connected')
+                  runButton.disabled = true;
+                }
+                socket.onmessage = (ev) => {
+                  log(ev.data, 'message')
+                }
+                socket.onclose = (ev) => {
+                  if (ev.reason) log(`Disconnect error: ${ev.reason}`, 'error')
+                  log(`Disconnected`)
+                  runButton.disabled = false;
+                  socket = null
+                }
+              } else {
+                log(`Error: ${request.status}: body: ${request.responseText}`, 'error');
+              }
+            }
+          }
+        }
+
+        uploadForm.addEventListener('submit', onSubmit);
+    </script>
+  </body>
+</html>
