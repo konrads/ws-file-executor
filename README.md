@@ -13,21 +13,48 @@ Endpoints provided:
 ```mermaid
 sequenceDiagram
     actor       User
-    participant page as /
-    participant upload as /upload
-    participant runCommand as /runCommand
+    participant page as index.html
+    participant upload as /upload<br/>(endpoint)
+    participant runCommand as /runCommand<br/>(endpoint)
+    participant fs as file in fs<br/>(Service)
+    participant registry as entry in registry<br/>(Service)
+    participant command as command execution<br/>(Service)
 
-    User->>page: load index.html
+    User->>page: load /
     activate page
-    page->>upload: uploads file/file_path
-    upload-->>page: issues id (X-File-Id)
-    page->>runCommand: issues command execution<br/>for file with id
-    runCommand-->>runCommand: WS connect for stdout streaming<br/>spawns the command
-    runCommand-->>page: issues stdout line 1
-    runCommand-->>page: issues stdout line 2
-    runCommand-->>page: issues stdout line 3
-    runCommand-->>page: ...
-    runCommand-->>page: closes WS
+    User->>page: set command<br/>file_path<br/>file to upload<br/>click 'Run'
+
+    # /upload request
+    rect rgb(240, 255, 255)
+        page->>upload: uploads file/file_path
+        activate fs
+        upload->>fs: persist the file under file_path
+        activate registry
+        upload->>registry: register full file path
+        upload-->>page: issues id
+    end
+
+    # /runCommand request
+    rect rgb(255, 245, 250)
+        page->>runCommand: initiate command execution for id
+        runCommand->>registry: get full path for id
+        runCommand->>command: spawn the command
+        activate command
+        runCommand-->>page: ws connect
+        command-->>runCommand: stdout:line 1
+        runCommand-->>page: ws msg: line 1
+        command-->>runCommand: stdout:line 2
+        runCommand-->>page: ws msg: line 2
+        command-->>runCommand: stdout:line 3
+        runCommand-->>page: ws msg: line 3
+        command-->>runCommand: command finished
+        deactivate command
+        runCommand-->>page: ws close
+        runCommand->>fs: remove file
+        deactivate fs
+        runCommand->>registry: deregister file
+        deactivate registry
+    end
     deactivate page
 ```
 
