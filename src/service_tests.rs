@@ -8,37 +8,37 @@ use tokio::sync::mpsc;
 
 #[actix_rt::test]
 async fn test_register_file() {
-    let services = ProdServices::new("test-stage/uploads".to_owned());
+    let services = ProdServices::new("tests/stage/uploads".to_owned());
     let id = ".id123";
     let uploaded_path = "ignore/me";
-    let source_file_path = "test-stage/scripts/register-file.txt";
+    let source_file_path = "tests/stage/scripts/register-file.txt";
     let mut source_file = File::open(source_file_path).unwrap();
     services
         .register_file(id, uploaded_path, &mut source_file)
         .await
         .unwrap();
     let file = services.get_file(id).await.unwrap();
-    assert_eq!(file, format!("test-stage/uploads/{id}/{uploaded_path}"));
+    assert_eq!(file, format!("tests/stage/uploads/{id}/{uploaded_path}"));
 
     // read source_file and compare to uploads/.gitkeep
     assert_eq!(
         "register-file contents",
-        read_file(&format!("test-stage/uploads/{id}/{uploaded_path}"))
+        read_file(&format!("tests/stage/uploads/{id}/{uploaded_path}"))
     );
 }
 
 #[actix_rt::test]
 async fn test_execute_cmd() {
     write_file(
-        "test-stage/uploads/.id345/mock-path/mock-script.sh",
+        "tests/stage/uploads/.id345/mock-path/mock-script.sh",
         "echo Sleep for 2\nsleep 2\n echo Done",
     );
 
     let services = ProdServices::with_init_files(
-        "test-stage/uploads".to_owned(),
+        "tests/stage/uploads".to_owned(),
         HashMap::from([(
             ".id345".to_owned(),
-            "test-stage/uploads/.id345/mock-path/mock-script.sh".to_owned(),
+            "tests/stage/uploads/.id345/mock-path/mock-script.sh".to_owned(),
         )]),
     );
 
@@ -62,7 +62,7 @@ async fn test_execute_cmd() {
 #[actix_rt::test]
 async fn test_execute_bogus_cmd() {
     let services = ProdServices::with_init_files(
-        "test-stage/uploads".to_owned(),
+        "tests/stage/uploads".to_owned(),
         HashMap::from([(".id456".to_owned(), "bogus_file".to_owned())]),
     );
 
@@ -77,10 +77,10 @@ async fn test_execute_bogus_cmd() {
 
 #[actix_rt::test]
 async fn test_execute_on_bogus_file() {
-    write_file("test-stage/uploads/.id567/evil/die-script.sh", "exit 66");
+    write_file("tests/stage/uploads/.id567/evil/die-script.sh", "exit 66");
 
     let services = ProdServices::with_init_files(
-        "test-stage/uploads".to_owned(),
+        "tests/stage/uploads".to_owned(),
         HashMap::from([(".id567".to_owned(), "bogus_file".to_owned())]),
     );
 
@@ -89,7 +89,7 @@ async fn test_execute_on_bogus_file() {
     let res = services
         .run_cmd(
             ".id456",
-            "test-stage/uploads/.id567/evil/die-script.sh",
+            "tests/stage/uploads/.id567/evil/die-script.sh",
             sender,
         )
         .await;
@@ -102,7 +102,7 @@ async fn test_execute_on_bogus_file() {
 /// Tests parallel roundtrips, mimicking multiple browser sessions
 #[actix_rt::test]
 async fn test_parallel_roundtrips() {
-    let services = Arc::new(ProdServices::new("test-stage/uploads".to_owned()));
+    let services = Arc::new(ProdServices::new("tests/stage/uploads".to_owned()));
 
     let mut scenario_futures = vec![];
     for i in 0..100 {
@@ -112,7 +112,7 @@ async fn test_parallel_roundtrips() {
         let future = rt::spawn(async move {
             let id = uuid::Uuid::new_v4().to_string();
             let mut source_file =
-                File::open(format!("test-stage/scripts/roundtrip{i}.sh")).unwrap();
+                File::open(format!("tests/stage/scripts/roundtrip{i}.sh")).unwrap();
 
             services
                 .register_file(&id, "scripts", &mut source_file)

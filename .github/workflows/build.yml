@@ -13,10 +13,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v2
       - name: Build
         run: cargo build --verbose
+      - name: Install selenium
+        run: pip install selenium
       - name: Test
-        run: cargo test --verbose
-      - name: Lint
+        run: cargo test --verbose --features integration-test
+      - name: Clippy
         run: cargo clippy --verbose -- -D warnings
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Audit
+        run: cargo audit
