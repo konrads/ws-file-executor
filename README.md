@@ -84,23 +84,23 @@ Open <http://localhost:8080>, select command (either `cat` | `wc` | `sh` | `bogu
 
 ## Testing
 
-For unit testing:
-
 ```sh
+# unit testing:
 cargo test
-```
-
-With selenium integration tests (for setup checkout [build.yml](.github/workflows/build.yml)):
-
-```sh
-pip install selenium
+# with selenium integration tests
+# requires: pip install selenium
 cargo test --features integration-test
 ```
 
-Unit testing comprises:
+Tests comprise:
 
-- route availability testing. Note: due to complexity of multiform data/WS upgrade, basic availability is tested
-- `ProdService`'s upload and cmd execution
-- white box parallel testing of upload/cmd execution, mimicking web page interaction. Note: this doesn't go through `actix_web` machinery.
+- Unit tests:
+  - route availability testing. Note: due to complexity of multiform data/WS upgrade, basic availability is tested
+  - `ProdService`'s upload and cmd execution
+  - white box parallel testing of upload/cmd execution, mimicking web page interaction. Note: this doesn't go through `actix_web` machinery.
+- Selenium tests:
+  - stand up the <http://localhost:8080> server
+  - run concurrent chrome headless clients for upload/`sh` command for `sh tests/stage/scripts/roundtrip1..4.sh
+  - validate stdout returned via WS
 
-For manual testing, see [Usage](#usage), and play with file imports/command running. For error conditions, feel free to select `bogus-cmd` for command, or [evil-cmd.sh](tests/stage/scripts/evil-cmd.sh)
+For further manual testing, see [Usage](#usage), play with file imports/command running. For error conditions, feel free to select `bogus-cmd` for command, or [evil-cmd.sh](tests/stage/scripts/evil-cmd.sh)
