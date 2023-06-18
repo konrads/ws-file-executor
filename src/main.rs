@@ -19,6 +19,7 @@ mod constants;
 use constants::*;
 mod service;
 use service::{ProdServices, Services};
+mod defer;
 
 #[cfg(test)]
 mod service_tests;

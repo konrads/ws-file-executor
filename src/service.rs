@@ -1,9 +1,10 @@
+use crate::defer;
 use async_trait::async_trait;
 use std::{collections::HashMap, fs::File, io, path::Path};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::Command,
-    sync::{mpsc::Sender, Mutex, RwLock},
+    sync::{mpsc::Sender, Mutex},
 };
 
 ///
@@ -19,8 +20,6 @@ pub enum ServiceError {
     UploadedFileNotFound { id: String },
     #[error("failed to stream")]
     StreamError,
-    #[error("failed to cleanup {id}")]
-    CleanupError { id: String },
     #[error("failed to save file {id}, {path}")]
     FileSaveError { id: String, path: String },
 }
@@ -45,14 +44,14 @@ pub(crate) trait Services: Send + Sync {
 ///
 pub(crate) struct ProdServices {
     uploads_dir: String,
-    files: RwLock<HashMap<String, Mutex<String>>>,
+    files: Mutex<HashMap<String, String>>,
 }
 
 impl ProdServices {
     pub fn new(uploads_dir: String) -> Self {
         Self {
             uploads_dir,
-            files: RwLock::new(HashMap::new()),
+            files: Mutex::new(HashMap::new()),
         }
     }
 
@@ -61,20 +60,14 @@ impl ProdServices {
     pub fn with_init_files(uploads_dir: String, files: HashMap<String, String>) -> Self {
         Self {
             uploads_dir,
-            files: RwLock::new(files.into_iter().map(|(k, v)| (k, Mutex::new(v))).collect()),
+            files: Mutex::new(files),
         }
     }
 
-    /// Helper function for test purposes only. Unlocks the files map entries via read locks.
+    /// Helper function for test purposes only.
     #[cfg(test)]
     pub async fn get_file(&self, id: &str) -> Option<String> {
-        let files = self.files.read().await;
-        if let Some(file_entry) = files.get(id).clone() {
-            let file_path = file_entry.lock().await.clone();
-            Some(file_path)
-        } else {
-            None
-        }
+        self.files.lock().await.get(id).cloned()
     }
 }
 
@@ -108,62 +101,45 @@ impl Services for ProdServices {
             path: full_path.to_owned(),
         })?;
 
-        self.files
-            .write()
-            .await
-            .insert(id.to_string(), Mutex::new(full_path.to_string()));
+        self.files.lock().await.insert(id.to_string(), full_path);
 
         Ok(())
     }
 
     /// Execute a command on a registered file. The command is executed in a separate process and the stdout is streamed back to the caller.
-    /// Note: cleanup async closure does primitive "finally" cleanup.
     async fn run_cmd(
         &self,
         id: &str,
         cmd: &str,
         stdout_sender: Sender<String>,
     ) -> Result<(), ServiceError> {
-        let files = self.files.read().await;
-
-        let cleanup = async {
+        // declare cleanup to be done upon function exit
+        defer! {
             let base_path = format!("{}/{}", self.uploads_dir, id);
             std::fs::remove_dir_all(&base_path)
-                .map_err(|_| ServiceError::CleanupError { id: id.to_owned() })?;
-            self.files.write().await.remove(id);
+                .unwrap_or_else(|_| log::error!("Failed to clean up path: {base_path}"));
             log::info!("Cleaned up file id: {id}, path: {base_path}");
-            Ok::<(), ServiceError>(())
-        };
+        }
 
-        if let Some(file_entry) = files.get(id) {
-            let file_path = file_entry.lock().await.clone();
-            drop(files);
-            let mut command = match Command::new(cmd)
+        let registered_file = self.files.lock().await.remove(id);
+
+        if let Some(file_path) = registered_file {
+            let mut command = Command::new(cmd)
                 .arg(file_path)
                 .stdout(std::process::Stdio::piped())
                 .spawn()
-            {
-                Ok(cmd) => cmd,
-                Err(e) => {
-                    cleanup.await.ok();
-                    return Err(ServiceError::SpawnError(e));
-                }
-            };
+                .map_err(ServiceError::SpawnError)?;
 
             if let Some(stdout) = &mut command.stdout {
                 let mut lines = BufReader::new(stdout).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
-                    match stdout_sender.send(line).await {
-                        Ok(_) => (),
-                        Err(_) => {
-                            cleanup.await.ok();
-                            return Err(ServiceError::StreamError);
-                        }
-                    }
+                    stdout_sender
+                        .send(line)
+                        .await
+                        .map_err(|_| ServiceError::StreamError)?;
                 }
             }
 
-            cleanup.await?;
             match command.wait().await? {
                 status if status.success() => Ok(()),
                 status => Err(status
